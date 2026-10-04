@@ -155,6 +155,22 @@ class AppDatabase extends _$AppDatabase {
         .write(ChecklistItemsCompanion(isDone: Value(!item.isDone)));
   }
 
-  Future<void> deleteItem(int id) =>
+    Future<void> deleteItem(int id) =>
       (delete(checklistItems)..where((t) => t.id.equals(id))).go();
+
+  Future<void> editItem(int id, String content) =>
+      (update(checklistItems)..where((t) => t.id.equals(id)))
+          .write(ChecklistItemsCompanion(content: Value(content)));
+
+  /// Isinusulat ulit ang position ng lahat ng items ayon sa bagong ayos.
+  Future<void> reorderItems(int noteId, List<ChecklistItem> ordered) async {
+    await transaction(() async {
+      for (var i = 0; i < ordered.length; i++) {
+        await (update(checklistItems)
+              ..where((t) => t.id.equals(ordered[i].id)))
+            .write(ChecklistItemsCompanion(position: Value(i)));
+      }
+    });
+    await _updateNote(noteId, const NotesCompanion());
+  }
 }

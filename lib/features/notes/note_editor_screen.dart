@@ -36,6 +36,35 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     await ref.read(databaseProvider).addItem(widget.noteId, text);
   }
 
+  Future<void> _editItem(ChecklistItem item) async {
+    final ctrl = TextEditingController(text: item.content);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('edit item'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'item'),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: const Text('save'),
+          ),
+        ],
+      ),
+    );
+    final text = result?.trim() ?? '';
+    if (text.isEmpty || text == item.content) return;
+    await ref.read(databaseProvider).editItem(item.id, text);
+  }
+
   Future<void> _confirmDelete() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -158,25 +187,37 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             const SizedBox(height: 8),
             const Divider(height: 1),
             Expanded(
-              child: ListView.builder(
+              child: ReorderableListView.builder(
+                buildDefaultDragHandles: false,
                 itemCount: data.items.length,
+                proxyDecorator: (child, index, animation) =>
+                    Material(color: Palette.surface, child: child),
+                onReorder: (oldIndex, newIndex) {
+                  if (newIndex > oldIndex) newIndex -= 1;
+                  final list = [...data.items];
+                  final moved = list.removeAt(oldIndex);
+                  list.insert(newIndex, moved);
+                  db.reorderItems(note.id, list);
+                },
                 itemBuilder: (context, i) {
                   final item = data.items[i];
                   return Dismissible(
                     key: ValueKey(item.id),
-                    background: Container(color: Palette.danger),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      color: Palette.danger,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 16),
+                      child: const Icon(Icons.delete_outline),
+                    ),
                     onDismissed: (_) => db.deleteItem(item.id),
-                    child: InkWell(
-                      onTap: () => db.toggleItem(item),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+                    child: Row(
+                      children: [
+                        InkWell(
+                          onTap: () => db.toggleItem(item),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                            child: Text(
                               item.isDone ? '[x]' : '[ ]',
                               style: TextStyle(
                                 color: item.isDone
@@ -184,8 +225,13 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                                     : Palette.dim,
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
+                          ),
+                        ),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _editItem(item),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text(
                                 item.content,
                                 style: TextStyle(
@@ -198,9 +244,20 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                                 ),
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                        ReorderableDragStartListener(
+                          index: i,
+                          child: const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Icon(
+                              Icons.drag_handle,
+                              size: 18,
+                              color: Palette.dim,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
