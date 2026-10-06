@@ -6,6 +6,7 @@ import '../../data/note_color.dart';
 import '../../data/providers.dart';
 import 'note_card.dart';
 import 'note_editor_screen.dart';
+import '../../data/templates.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -28,6 +29,52 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+    Future<void> _pickTemplate() async {
+    final picked = await showModalBottomSheet<NoteTemplate>(
+      context: context,
+      backgroundColor: Palette.surface,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text(
+                '~/templates \$',
+                style: TextStyle(
+                  color: Palette.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            for (final tpl in noteTemplates)
+              ListTile(
+                leading: Text(
+                  '#${tpl.color.label}',
+                  style: TextStyle(color: tpl.color.color, fontSize: 12),
+                ),
+                title: Text(tpl.name),
+                subtitle: Text(
+                  '${tpl.items.length} items',
+                  style: const TextStyle(color: Palette.dim, fontSize: 12),
+                ),
+                onTap: () => Navigator.pop(ctx, tpl),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final id = await ref.read(databaseProvider).createNoteWithItems(
+          title: picked.title,
+          color: picked.color,
+          items: picked.items,
+        );
+    if (!mounted) return;
+    _open(id);
+  }
+
   void _open(int id) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => NoteEditorScreen(noteId: id)),
@@ -42,7 +89,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_archived ? '~/archive \$' : '~/notes \$'),
-        actions: [
+                actions: [
+          if (!_archived)
+            IconButton(
+              tooltip: 'templates',
+              icon: const Icon(Icons.dashboard_customize_outlined),
+              onPressed: _pickTemplate,
+            ),
           IconButton(
             tooltip: _archived ? 'notes' : 'archive',
             icon: Icon(
