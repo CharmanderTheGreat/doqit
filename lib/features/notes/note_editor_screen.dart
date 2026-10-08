@@ -34,6 +34,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     if (text.isEmpty) return;
     _itemCtrl.clear();
     await ref.read(databaseProvider).addItem(widget.noteId, text);
+    if (mounted) _itemFocus.requestFocus();
   }
 
   Future<void> _editItem(ChecklistItem item) async {
@@ -45,6 +46,10 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         content: TextField(
           controller: ctrl,
           autofocus: true,
+          keyboardType: TextInputType.text,
+          textInputAction: TextInputAction.done,
+          minLines: 1,
+          maxLines: 6,
           decoration: const InputDecoration(hintText: 'item'),
           onSubmitted: (v) => Navigator.pop(ctx, v),
         ),
@@ -60,6 +65,7 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         ],
       ),
     );
+    ctrl.dispose();
     final text = result?.trim() ?? '';
     if (text.isEmpty || text == item.content) return;
     await ref.read(databaseProvider).editItem(item.id, text);
@@ -142,7 +148,10 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
               child: TextField(
                 controller: _title,
                 autofocus: widget.isNew,
+                keyboardType: TextInputType.text,
                 textInputAction: TextInputAction.next,
+                minLines: 1,
+                maxLines: 3,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 decoration: const InputDecoration(
                   hintText: 'title',
@@ -266,15 +275,23 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
             SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 4, 24, 8),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('> ', style: TextStyle(color: Palette.green)),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 14),
+                      child: Text('> ', style: TextStyle(color: Palette.green)),
+                    ),
                     Expanded(
                       child: TextField(
                         controller: _itemCtrl,
                         focusNode: _itemFocus,
+                        keyboardType: TextInputType.text,
                         textInputAction: TextInputAction.done,
+                        minLines: 1,
+                        maxLines: 5,
+                        scrollPadding: const EdgeInsets.only(bottom: 80),
                         decoration: const InputDecoration(
                           hintText: 'add item...',
                           border: InputBorder.none,

@@ -162,15 +162,38 @@ class AppDatabase extends _$AppDatabase {
       (update(checklistItems)..where((t) => t.id.equals(id)))
           .write(ChecklistItemsCompanion(content: Value(content)));
 
-  /// Isinusulat ulit ang position ng lahat ng items ayon sa bagong ayos.
+ 
   Future<void> reorderItems(int noteId, List<ChecklistItem> ordered) async {
     await transaction(() async {
       for (var i = 0; i < ordered.length; i++) {
         await (update(checklistItems)
               ..where((t) => t.id.equals(ordered[i].id)))
-            .write(ChecklistItemsCompanion(position: Value(i)));
+                        .write(ChecklistItemsCompanion(position: Value(i)));
       }
     });
     await _updateNote(noteId, const NotesCompanion());
+  }
+
+  /// Gumagawa ng note at ng lahat ng items nito sa isang transaction.
+  Future<int> createNoteWithItems({
+    required String title,
+    required NoteColor color,
+    required List<String> items,
+  }) {
+    return transaction(() async {
+      final id = await into(notes).insert(
+        NotesCompanion.insert(title: Value(title), colorTag: Value(color)),
+      );
+      for (var i = 0; i < items.length; i++) {
+        await into(checklistItems).insert(
+          ChecklistItemsCompanion.insert(
+            noteId: id,
+            content: items[i],
+            position: Value(i),
+          ),
+        );
+      }
+      return id;
+    });
   }
 }
