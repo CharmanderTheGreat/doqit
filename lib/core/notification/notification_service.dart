@@ -63,8 +63,9 @@ class NotificationService {
         id: noteId,
         title: title.trim().isEmpty ? 'Reminder' : title.trim(),
         body: 'Tap to open Doqit',
-        // Only the instant matters for one-shot reminders, so UTC is enough.
-        scheduledDate: tz.TZDateTime.from(when, tz.UTC),
+        // Reminder times are stored in the user's local wall-clock time,
+        // so the notification must be scheduled in the local timezone.
+        scheduledDate: tz.TZDateTime.from(when, tz.local),
         notificationDetails: const NotificationDetails(android: _channel),
         androidScheduleMode: exact
             ? AndroidScheduleMode.exactAllowWhileIdle
