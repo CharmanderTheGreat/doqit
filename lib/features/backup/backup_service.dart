@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/notifications/notification_service.dart';
 import '../../data/database.dart';
 
 class BackupService {
@@ -38,6 +39,8 @@ class BackupService {
     if (data is! Map<String, dynamic>) {
       throw const FormatException('not a Doqit backup');
     }
-    return _db.importData(data);
+        final result = await _db.importData(data);
+    await NotificationService.instance.syncAll(_db);
+    return result;
   }
 }

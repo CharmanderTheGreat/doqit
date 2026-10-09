@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../data/note_color.dart';
+import '../../core/notifications/notification_service.dart';
 import '../../data/providers.dart';
 
 class NoteEditorScreen extends ConsumerStatefulWidget {
@@ -89,9 +90,70 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
         ],
       ),
     );
-    if (ok != true || !mounted) return;
+        if (ok != true || !mounted) return;
+    await NotificationService.instance.cancel(widget.noteId);
     await ref.read(databaseProvider).deleteNote(widget.noteId);
     if (mounted) Navigator.pop(context);
+  }
+
+    void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  String _fmt(DateTime d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
+  }
+
+  Future<void> _pickReminder(Note note) async {
+    final now = DateTime.now();
+    final existing = note.reminderAt;
+    final initial = existing != null && existing.isAfter(now)
+        ? existing
+        : now.add(const Duration(hours: 1));
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365 * 5)),
+    );
+    if (date == null || !mounted) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+    );
+    if (time == null || !mounted) return;
+
+    final when =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    if (!when.isAfter(DateTime.now())) {
+      _toast('pick a time in the future');
+      return;
+    }
+
+    final service = NotificationService.instance;
+    if (!await service.requestPermission()) {
+      _toast('notifications are blocked, enable them in system settings');
+      return;
+    }
+    final ok = await service.schedule(
+      noteId: note.id,
+      title: note.title,
+      when: when,
+    );
+    if (!ok) {
+      _toast('could not schedule the reminder');
+      return;
+    }
+    await ref.read(databaseProvider).setReminder(note.id, when);
+  }
+
+  Future<void> _clearReminder(Note note) async {
+    await NotificationService.instance.cancel(note.id);
+    await ref.read(databaseProvider).setReminder(note.id, null);
   }
 
   @override
@@ -107,8 +169,25 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
     final note = data.note;
 
     return PopScope(
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) db.deleteIfEmpty(widget.noteId);
+            onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) return;
+        db.deleteIfEmpty(widget.noteId).then((deleted) {
+          if (deleted) {
+            NotificationService.instance.cancel(widget.noteId);
+            return;
+          }
+          // Refresh the notification so it shows the latest title.
+          final r = note.reminderAt;
+          if (r != null &&
+              r.isAfter(DateTime.now()) &&
+              note.title.trim().isNotEmpty) {
+            NotificationService.instance.schedule(
+              noteId: note.id,
+              title: note.title,
+              when: r,
+            );
+          }
+        });
       },
       child: Scaffold(
         appBar: AppBar(
@@ -128,7 +207,12 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                     ? Icons.unarchive_outlined
                     : Icons.archive_outlined,
               ),
-              onPressed: () async {
+                            onPressed: () async {
+                if (!note.isArchived) {
+                  // Archived notes should not ring.
+                  await NotificationService.instance.cancel(note.id);
+                  await db.setReminder(note.id, null);
+                }
                 await db.setArchived(note.id, !note.isArchived);
                 if (context.mounted) Navigator.pop(context);
               },
@@ -193,7 +277,40 @@ class _NoteEditorScreenState extends ConsumerState<NoteEditorScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+                        Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () => _pickReminder(note),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Text(
+                        note.reminderAt == null
+                            ? '+ add reminder'
+                            : '@ ${_fmt(note.reminderAt!)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: note.reminderAt == null ||
+                                  !note.reminderAt!.isAfter(DateTime.now())
+                              ? Palette.dim
+                              : Palette.green,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (note.reminderAt != null)
+                    InkWell(
+                      onTap: () => _clearReminder(note),
+                      child: const Padding(
+                        padding: EdgeInsets.all(6),
+                        child: Icon(Icons.close, size: 14, color: Palette.dim),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
             const Divider(height: 1),
             Expanded(
               child: ReorderableListView.builder(

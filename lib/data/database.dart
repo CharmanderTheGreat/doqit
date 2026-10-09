@@ -116,18 +116,37 @@ class AppDatabase extends _$AppDatabase {
   Future<void> setArchived(int id, bool value) =>
       _updateNote(id, NotesCompanion(isArchived: Value(value)));
 
-  Future<void> deleteNote(int id) =>
+    Future<void> deleteNote(int id) =>
       (delete(notes)..where((t) => t.id.equals(id))).go();
 
+  Future<void> setReminder(int id, DateTime? when) =>
+      _updateNote(id, NotesCompanion(reminderAt: Value(when)));
+
+  /// Active (non-archived) notes whose reminder is still in the future.
+  Future<List<Note>> upcomingReminders() {
+    return (select(notes)
+          ..where(
+            (t) =>
+                t.reminderAt.isNotNull() &
+                t.isArchived.equals(false) &
+                t.reminderAt.isBiggerThanValue(DateTime.now()),
+          ))
+        .get();
+  }
+
   /// Tinatanggal ang note kapag walang title at walang items.
-  Future<void> deleteIfEmpty(int id) async {
+    Future<bool> deleteIfEmpty(int id) async {
     final note =
         await (select(notes)..where((t) => t.id.equals(id))).getSingleOrNull();
-    if (note == null || note.title.trim().isNotEmpty) return;
+    if (note == null || note.title.trim().isNotEmpty) return false;
     final items = await (select(checklistItems)
           ..where((t) => t.noteId.equals(id)))
         .get();
-    if (items.isEmpty) await deleteNote(id);
+    if (items.isEmpty) {
+      await deleteNote(id);
+      return true;
+    }
+    return false;
   }
 
   // ---------- Checklist items ----------
